@@ -23,42 +23,9 @@ async function getFicha(id){
  if(!data)return null;
  try{return JSON.parse(data)}catch{return null}
 }
-const saveFicha=item=>redis('SET',`ficha:${item.id}`,JSON.stringify(item),'EX',TTL);
-const isPago=s=>s==='pago';
-
-// Fichas antigas não têm a lista de transações: cria a partir dos campos da própria ficha
-function transacoesDe(f){
- if(Array.isArray(f.transacoes)&&f.transacoes.length)return f.transacoes;
- return [{id:f.id,quantidade:f.quantidade,valor:f.valor,criado_em:f.criado_em,status:isPago(f.status)?'pago':'pix_gerado'}];
+async function saveFicha(item){
+ await redis('SET',`ficha:${item.id}`,JSON.stringify(item),'EX',TTL);
 }
-
-// Junta todos os registros do mesmo CPF numa ficha só (1 pessoa = 1 ficha)
-function agrupar(rows){
- const grupos=new Map();
- for(const r of rows){const k=r.cpf||r.id;if(!grupos.has(k))grupos.set(k,[]);grupos.get(k).push(r)}
- const out=[];
- for(const recs of grupos.values()){
-  recs.sort((a,b)=>new Date(a.criado_em)-new Date(b.criado_em));
-  const main=recs[0],ultimo=recs[recs.length-1];
-  const txMap=new Map();
-  recs.forEach(r=>transacoesDe(r).forEach(t=>{const old=txMap.get(t.id);if(!old||isPago(t.status))txMap.set(t.id,t)}));
-  const tx=[...txMap.values()].sort((a,b)=>new Date(a.criado_em)-new Date(b.criado_em));
-  const pagas=tx.filter(t=>isPago(t.status));
-  const ref=pagas.length?pagas[pagas.length-1]:tx[tx.length-1];
-  out.push({
-   id:main.id,ids:recs.map(r=>r.id),cpf:main.cpf,
-   nome:ultimo.nome||main.nome,data_nascimento:ultimo.data_nascimento||main.data_nascimento,telefone:ultimo.telefone||main.telefone,
-   quantidade:ref.quantidade,valor:ref.valor,transacao:ref.id,
-   status:pagas.length?'pago':'pix_gerado',pago_em:recs.map(r=>r.pago_em).filter(Boolean).sort().pop()||null,
-   pego:recs.some(r=>r.pego),
-   pix_count:tx.length,pix_pagos:pagas.length,
-   criado_em:main.criado_em,ultimo_pix_em:tx[tx.length-1].criado_em,
-   transacoes:tx
-  });
- }
- return out.sort((a,b)=>new Date(b.ultimo_pix_em)-new Date(a.ultimo_pix_em));
-}
-
 // Confirma no gateway antes de marcar como paga (evita que alguém marque fichas falsamente)
 async function pagoNoGateway(id,route){
  try{
@@ -77,16 +44,12 @@ export default async function handler(req,res){
    const x=req.body||{};
    // Atualização de status para "pago" enviada pelo site após confirmação do PIX
    if(x.action==='pago'){
-    const txId=String(x.transaction_id||'');
-    if(!ID_RE.test(txId))return res.status(400).json({error:'ID inválido'});
-    const fichaId=(await redis('GET',`tx:${txId}`))||txId;
-    const item=await getFicha(fichaId);
+    const id=String(x.transaction_id||'');
+    if(!ID_RE.test(id))return res.status(400).json({error:'ID inválido'});
+    const item=await getFicha(id);
     if(!item)return res.status(404).json({error:'Ficha não encontrada'});
-    item.transacoes=transacoesDe(item);
-    const t=item.transacoes.find(t=>t.id===txId);
-    if(t&&isPago(t.status))return res.status(200).json({ok:true});
-    if(!(await pagoNoGateway(txId,x.route)))return res.status(409).json({error:'Pagamento não confirmado'});
-    if(t)t.status='pago';
+    if(item.status==='pago')return res.status(200).json({ok:true});
+    if(!(await pagoNoGateway(id,x.route)))return res.status(409).json({error:'Pagamento não confirmado'});
     item.status='pago';item.pago_em=new Date().toISOString();
     await saveFicha(item);
     return res.status(200).json({ok:true});
@@ -94,60 +57,30 @@ export default async function handler(req,res){
    const cpf=String(x.cpf||'').replace(/\D/g,''),tel=String(x.telefone||'').replace(/\D/g,'');
    const qtd=Number(x.quantidade),valor=Number(x.valor),id=String(x.transaction_id||'');
    if(cpf.length!==11||tel.length<10||!Number.isInteger(qtd)||qtd<15||qtd>500||Math.abs(valor-qtd*.49)>.011||!ID_RE.test(id))return res.status(400).json({error:'Dados inválidos'});
-   const agora=new Date().toISOString();
-   const nova={id,quantidade:qtd,valor,criado_em:agora,status:'pix_gerado'};
-   const dados={nome:String(x.nome||'').slice(0,120),data_nascimento:String(x.data_nascimento||'').slice(0,30),telefone:tel};
-
-   // Mesmo CPF já tem ficha? Adiciona o PIX novo nela em vez de criar outra
-   const existenteId=await redis('GET',`cpfidx:${cpf}`);
-   const existente=existenteId?await getFicha(existenteId):null;
-   if(existente){
-    existente.transacoes=transacoesDe(existente);
-    if(!existente.transacoes.some(t=>t.id===id))existente.transacoes.push(nova);
-    Object.assign(existente,{nome:dados.nome||existente.nome,data_nascimento:dados.data_nascimento||existente.data_nascimento,telefone:tel,ultimo_pix_em:agora});
-    if(!isPago(existente.status)){existente.quantidade=qtd;existente.valor=valor}
-    await saveFicha(existente);
-    await redis('SET',`tx:${id}`,existente.id,'EX',TTL);
-    await redis('EXPIRE',`cpfidx:${cpf}`,TTL);
-    await redis('ZADD','fichas:indices',Date.now(),existente.id);
-    return res.status(200).json({ok:true,agrupada:true});
-   }
-   const item={id,cpf,...dados,quantidade:qtd,valor,status:'pix_gerado',pego:false,criado_em:agora,ultimo_pix_em:agora,transacoes:[nova]};
+   const item={id,cpf,nome:String(x.nome||'').slice(0,120),data_nascimento:String(x.data_nascimento||'').slice(0,30),telefone:tel,quantidade:qtd,valor,status:'pix_gerado',pego:false,criado_em:new Date().toISOString()};
    await saveFicha(item);
-   await redis('SET',`cpfidx:${cpf}`,id,'EX',TTL);
-   await redis('SET',`tx:${id}`,id,'EX',TTL);
    await redis('ZADD','fichas:indices',Date.now(),id);
    return res.status(201).json({ok:true});
   }
   if(!authorized(req))return res.status(401).json({error:'Acesso não autorizado'});
-  const listaIds=x=>[...new Set((Array.isArray(x)?x:String(x||'').split(',')).map(String).filter(i=>ID_RE.test(i)))].slice(0,50);
   if(req.method==='GET'){
-   const ids=await redis('ZREVRANGE','fichas:indices',0,999)||[];
-   const rows=(await Promise.all(ids.map(getFicha))).filter(Boolean);
-   return res.status(200).json({fichas:agrupar(rows)});
+   const ids=await redis('ZREVRANGE','fichas:indices',0,499)||[];
+   const rows=await Promise.all(ids.map(getFicha));
+   return res.status(200).json({fichas:rows.filter(Boolean)});
   }
   if(req.method==='PATCH'){
    const x=req.body||{};
-   const ids=listaIds(x.ids||x.id||req.query.id);
-   if(!ids.length)return res.status(400).json({error:'ID inválido'});
-   if(typeof x.pego!=='boolean')return res.status(400).json({error:'Nada para alterar'});
-   let n=0;
-   for(const id of ids){
-    const item=await getFicha(id);if(!item)continue;
-    item.pego=x.pego;item.pego_em=x.pego?new Date().toISOString():null;
-    await saveFicha(item);n++;
-   }
-   if(!n)return res.status(404).json({error:'Ficha não encontrada'});
-   return res.status(200).json({ok:true});
+   const id=String(x.id||req.query.id||'');
+   if(!ID_RE.test(id))return res.status(400).json({error:'ID inválido'});
+   const item=await getFicha(id);
+   if(!item)return res.status(404).json({error:'Ficha não encontrada'});
+   if(typeof x.pego==='boolean'){item.pego=x.pego;item.pego_em=x.pego?new Date().toISOString():null;}
+   await saveFicha(item);
+   return res.status(200).json({ok:true,ficha:item});
   }
   if(req.method==='DELETE'){
-   const ids=listaIds(req.query.ids||req.query.id);
-   if(!ids.length)return res.status(400).json({error:'ID inválido'});
-   for(const id of ids){
-    const item=await getFicha(id);
-    if(item?.cpf&&(await redis('GET',`cpfidx:${item.cpf}`))===id)await redis('DEL',`cpfidx:${item.cpf}`);
-    await redis('DEL',`ficha:${id}`);await redis('ZREM','fichas:indices',id);
-   }
+   const id=String(req.query.id||'');if(!ID_RE.test(id))return res.status(400).json({error:'ID inválido'});
+   await redis('DEL',`ficha:${id}`);await redis('ZREM','fichas:indices',id);
    return res.status(200).json({ok:true});
   }
   return res.status(405).json({error:'Método não permitido'});

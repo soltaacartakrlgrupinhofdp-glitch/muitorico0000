@@ -117,7 +117,6 @@ main{max-width:1680px;margin:auto;padding:24px 20px 80px}
 .b-pix{background:var(--amber-bg);color:var(--amber)}
 .b-pago{background:var(--green-bg);color:var(--green)}
 .b-pego{background:rgba(167,139,250,.14);color:var(--violet)}
-.b-multi{background:rgba(255,255,255,.07);color:#c9d2e6}
 .b-nova{background:rgba(91,124,255,.16);color:var(--blue)}
 .f-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:12px}
 .f-grid div small{display:block;color:var(--dim);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
@@ -292,9 +291,9 @@ Nascimento: ${nascBR(f.data_nascimento)}
 WhatsApp: ${fmtTel(f.telefone)}
 Títulos: ${f.quantidade}
 Valor: ${brl(f.valor)}
-Status: ${statusTxt(f)}${(f.pix_count||1)>1?`\nPIX gerados: ${f.pix_count}`:''}
-Transação: ${f.transacao||f.id}
-Data: ${dataBR(f.ultimo_pix_em||f.criado_em)} (horário de Brasília)`};
+Status: ${statusTxt(f)}
+Transação: ${f.id}
+Data: ${dataBR(f.criado_em)} (horário de Brasília)`};
 
 /* ---------- UI helpers ---------- */
 function toast(msg,{err=false,action=null,onAction=null,ms=3200}={}){
@@ -383,7 +382,7 @@ setInterval(()=>{if(senha)document.querySelectorAll('[data-rel]').forEach(el=>el
 const FILTROS=[['todas','Todas',()=>true],['apegar','A pegar',f=>!f.pego],['pegas','Peguei',f=>f.pego],['pagas','Pagas',pago],['pix','Só PIX gerado',f=>!pago(f)]];
 function visiveis(){
   const fn=FILTROS.find(x=>x[0]===filtro)[2];const q=busca.toLowerCase().trim(),qd=q.replace(/\D/g,'');
-  return fichas.filter(fn).filter(f=>!q||String(f.nome||'').toLowerCase().includes(q)||(f.transacoes||[{id:f.id}]).some(t=>String(t.id).toLowerCase().includes(q))||(qd.length>=3&&(String(f.cpf).includes(qd)||String(f.telefone).includes(qd))));
+  return fichas.filter(fn).filter(f=>!q||String(f.nome||'').toLowerCase().includes(q)||String(f.id).toLowerCase().includes(q)||(qd.length>=3&&(String(f.cpf).includes(qd)||String(f.telefone).includes(qd))));
 }
 function render(){
   const tot=fichas.length,pegas=fichas.filter(f=>f.pego).length,pagas=fichas.filter(pago),hoje=new Intl.DateTimeFormat('pt-BR',{timeZone:TZ}).format(new Date());
@@ -406,16 +405,16 @@ function render(){
         <div class="avatar" style="--h:${hue(f.nome||f.id)}">${esc(iniciais(f.nome))}</div>
         <div class="f-name"><b>${esc(f.nome||'Sem nome')}</b><small>${id_!=null?id_+' anos':'Idade não informada'}</small></div>
       </div>
-      <div class="badges">${f._nova?'<span class="badge b-nova">Nova</span>':''}<span class="badge ${pago(f)?'b-pago':'b-pix'}">${statusTxt(f)}</span>${(f.pix_count||1)>1?`<span class="badge b-multi" title="Esse cliente gerou ${f.pix_count} PIX">${f.pix_count} PIX</span>`:''}${f.pego?'<span class="badge b-pego">Peguei</span>':''}</div>
+      <div class="badges">${f._nova?'<span class="badge b-nova">Nova</span>':''}<span class="badge ${pago(f)?'b-pago':'b-pix'}">${statusTxt(f)}</span>${f.pego?'<span class="badge b-pego">Peguei</span>':''}</div>
       <div class="f-grid">
         <div><small>CPF</small><span>${esc(fmtCPF(f.cpf))}</span></div>
         <div><small>Nascimento</small><span>${esc(nascBR(f.data_nascimento))}</span></div>
         <div><small>WhatsApp</small><span>${esc(fmtTel(f.telefone))}</span></div>
         <div><small>Títulos</small><span>${esc(f.quantidade)}</span></div>
         <div><small>Valor</small><span class="money">${brl(f.valor)}</span></div>
-        <div class="full"><small>${(f.pix_count||1)>1?'Último PIX (Brasília)':'Data (Brasília)'}</small><span>${esc(dataBR(f.ultimo_pix_em||f.criado_em))} · <span data-rel="${esc(f.ultimo_pix_em||f.criado_em)}" style="color:var(--muted);font-weight:500">${relativo(f.ultimo_pix_em||f.criado_em)}</span></span></div>
+        <div class="full"><small>Data (Brasília)</small><span>${esc(dataBR(f.criado_em))} · <span data-rel="${esc(f.criado_em)}" style="color:var(--muted);font-weight:500">${relativo(f.criado_em)}</span></span></div>
       </div>
-      <div class="f-meta"><span class="mono" title="${esc(f.transacao||f.id)}">${esc(f.transacao||f.id)}</span><span class="f-tools">
+      <div class="f-meta"><span class="mono" title="${esc(f.id)}">${esc(f.id)}</span><span class="f-tools">
         <a class="act sq wa" href="https://wa.me/55${esc(String(f.telefone).replace(/\D/g,''))}" target="_blank" rel="noopener" title="Abrir WhatsApp">${ICON.wa}</a>
         <button class="act sq del" data-a="excluir" title="Excluir ficha">${ICON.trash}</button></span></div>
       <div class="f-actions">
@@ -443,28 +442,25 @@ $('lista').onclick=async e=>{
   if(a==='peguei')marcarPego(f,!f.pego);
   if(a==='excluir'){
     if(!(await confirmar('Excluir ficha?',`A ficha de ${f.nome||'este cliente'} será apagada permanentemente.`)))return;
-    try{await api('DELETE','?ids='+encodeURIComponent((f.ids||[f.id]).join(',')));card.classList.add('removing');setTimeout(()=>{fichas=fichas.filter(x=>x.id!==f.id);render()},330);toast('Ficha excluída')}
+    try{await api('DELETE','?id='+encodeURIComponent(f.id));card.classList.add('removing');setTimeout(()=>{fichas=fichas.filter(x=>x.id!==f.id);render()},330);toast('Ficha excluída')}
     catch(err){toast(err.message,{err:true})}
   }
 };
 async function marcarPego(f,valor){
   const antes=f.pego;f.pego=valor;f._nova=false;render();
   const btn=document.querySelector(`.ficha[data-id="${CSS.escape(f.id)}"] .peguei`);btn&&btn.classList.add('pop');
-  try{await api('PATCH','',{ids:f.ids||[f.id],pego:valor});toast(valor?'Marcada como peguei':'Marcação de peguei removida')}
+  try{await api('PATCH','',{id:f.id,pego:valor});toast(valor?'Marcada como peguei':'Marcação de peguei removida')}
   catch(err){f.pego=antes;render();toast('Não foi possível salvar: '+err.message,{err:true})}
-}
-async function salvarPegos(lista,valor){
-  lista.forEach(f=>{f.pego=valor;f._nova=false});render();
-  const r=await Promise.allSettled(lista.map(f=>api('PATCH','',{ids:f.ids||[f.id],pego:valor})));
-  const falhas=r.filter(x=>x.status==='rejected').length;
-  if(falhas)toast(`${falhas} ficha(s) não foram salvas, clique em Atualizar`,{err:true});
-  return !falhas;
 }
 $('btnCopiarNaoPegas').onclick=async()=>{
   const apegar=fichas.filter(f=>!f.pego);if(!apegar.length){toast('Todas as fichas já foram pegas');return}
   if(!(await copiarTexto(apegar.map(texto).join('\n\n---\n\n')))){toast('Não foi possível copiar',{err:true});return}
-  const ok=await salvarPegos(apegar,true);
-  if(ok)toast(`${apegar.length} ficha(s) copiada(s) e marcada(s) como peguei`,{action:'Desfazer',onAction:async()=>{if(await salvarPegos(apegar,false))toast('Marcação desfeita')}});
+  toast(`${apegar.length} ficha(s) não pegas copiada(s)`,{action:'Marcar como peguei',onAction:async()=>{
+    apegar.forEach(f=>{f.pego=true;f._nova=false});render();
+    const r=await Promise.allSettled(apegar.map(f=>api('PATCH','',{id:f.id,pego:true})));
+    const falhas=r.filter(x=>x.status==='rejected').length;
+    falhas?toast(`${falhas} não foram salvas, clique em Atualizar`,{err:true}):toast('Todas marcadas como peguei');
+  }});
 };
 $('btnCopiarTudo').onclick=async()=>{
   if(!fichas.length){toast('Nenhuma ficha ainda',{err:true});return}
