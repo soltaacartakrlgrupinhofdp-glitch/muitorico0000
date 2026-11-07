@@ -5,7 +5,13 @@ export async function pagou(path, method='GET', body) {
  if(!key){const e=new Error('PAGOU_API_KEY não configurada no servidor');e.status=503;throw e;}
  const response=await fetch(PAGOU_BASE+path,{method,headers:{Authorization:`Bearer ${key}`,'Accept':'application/json',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(18000)});
  const raw=await response.text();let data={};try{data=raw?JSON.parse(raw):{}}catch{data={}};
- if(!response.ok){const e=new Error(response.status===401?'Pagou.ai recusou a credencial (401). Verifique a chave v2 e o ambiente.':(data.detail||data.message||data.error||`Pagou HTTP ${response.status}`));e.status=response.status;throw e;}
+ if(!response.ok){
+  const fields=Array.isArray(data.errors)?data.errors.map(item=>({field:String(item.field||'').slice(0,80),code:String(item.code||'').slice(0,60)})):[];
+  console.error('Pagou API diagnostic',JSON.stringify({status:response.status,requestId:response.headers.get('x-request-id')||data.requestId||null,type:data.type||null,title:data.title||null,fields}));
+  const detail=typeof data.detail==='string'?data.detail:typeof data.message==='string'?data.message:typeof data.error==='string'?data.error:`Pagou HTTP ${response.status}`;
+  const e=new Error(response.status===401?'Pagou.ai recusou a credencial (401). Verifique a chave v2 e o ambiente.':detail);
+  e.status=response.status;e.fields=fields;throw e;
+ }
  return data;
 }
 export function digits(v){return String(v||'').replace(/\D/g,'');}
