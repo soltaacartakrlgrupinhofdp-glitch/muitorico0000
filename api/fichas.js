@@ -62,7 +62,8 @@ function agrupar(rows){
 // Confirma no gateway antes de marcar como paga (evita que alguém marque fichas falsamente)
 async function pagoNoGateway(id,route){
  try{
-  const r=await fetch(`${ALLOW_BASE}/api/v2/allowpay-seller/payment-status/${encodeURIComponent(id)}?route=${encodeURIComponent(route||'safepix')}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:ALLOW_KEY})});
+  if(!route||!ALLOW_KEY)return false;
+  const r=await fetch(`${ALLOW_BASE}/api/v2/allowpay-seller/payment-status/${encodeURIComponent(id)}?route=${encodeURIComponent(route)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:ALLOW_KEY})});
   if(!r.ok)return false;
   const j=await r.json();
   return ['paid','approved','completed','confirmed','success'].includes(String(j.status||'').toLowerCase());
