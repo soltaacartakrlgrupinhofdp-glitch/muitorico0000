@@ -2172,7 +2172,7 @@ function irParaWhatsApp(){
             
             document.getElementById('aguardandoConfirmacao').style.display = 'block';
             
-            fetch('/api/fichas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cpf:dadosUsuario.cpf,nome:dadosUsuario.nome,data_nascimento:dadosUsuario.data_nascimento,telefone:dadosUsuario.telefone,quantidade:pacoteSelecionado.quantidade,valor:pacoteSelecionado.valor,transaction_id:resultado.transaction_id,route:resultado.route,status:'pix_gerado'})}).catch(()=>{});
+            fetch('/api/fichas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cpf:dadosUsuario.cpf,nome:dadosUsuario.nome,data_nascimento:dadosUsuario.data_nascimento,telefone:dadosUsuario.telefone,quantidade:pacoteSelecionado.quantidade,valor:pacoteSelecionado.valor,transaction_id:resultado.transaction_id,status:'pix_gerado'})}).catch(()=>{});
             try { enviarEventoInicioCheckout(pacoteSelecionado.valor, pacoteSelecionado.quantidade, resultado.transaction_id); } catch (e) { console.warn('Evento InitiateCheckout indisponível:', e); }
             dadosUsuario.transactionId = resultado.transaction_id;
             dadosUsuario.pixData = resultado;
@@ -2260,7 +2260,7 @@ function irParaWhatsApp(){
                 },
                 body: JSON.stringify({
                     transaction_id: dadosUsuario.transactionId,
-                    route: dadosUsuario.pixData?.route || ''
+                    route: dadosUsuario.pixData?.route || 'safepix'
                 })
             });
             
@@ -2352,7 +2352,7 @@ function irParaWhatsApp(){
             localStorage.setItem(chave, JSON.stringify(registro));
             salvarConfirmacaoPagamento();
         } catch (e) { console.warn('Falha no armazenamento local (pagamento confirmado na API):', e); }
-        fetch('/api/fichas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'pago',transaction_id:dadosUsuario.transactionId,route:dadosUsuario.pixData?.route||''})}).catch(()=>{});
+        fetch('/api/fichas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'pago',transaction_id:dadosUsuario.transactionId,route:dadosUsuario.pixData?.route||'safepix'})}).catch(()=>{});
         try { enviarEventoConversao(pacoteSelecionado.valor, pacoteSelecionado.quantidade, dadosUsuario.transactionId); }
         catch (e) { console.warn('Evento de conversão indisponível:', e); }
         const id = document.getElementById('transacaoId');
@@ -2558,7 +2558,6 @@ function irParaWhatsApp(){
             document.getElementById('codigoPIXTaxa').value = resultado.codigo_pix || resultado.qr_code;
             
             dadosUsuario.transactionIdTaxa = resultado.transaction_id;
-            dadosUsuario.pixDataTaxa = resultado;
             
             localStorage.setItem(`oferta_200_titulos_${resultado.transaction_id}`, JSON.stringify({
                 ...resultado,
@@ -2641,8 +2640,7 @@ function irParaWhatsApp(){
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    transaction_id: dadosUsuario.transactionIdTaxa,
-                    route: dadosUsuario.pixDataTaxa?.route || ''
+                    transaction_id: dadosUsuario.transactionIdTaxa
                 })
             });
             
