@@ -1,6 +1,7 @@
-export const PAGOU_BASE = process.env.PAGOU_ENV === 'production' ? 'https://api.pagou.com.br' : 'https://api.pagou.cloud';
+// Produção por padrão; Sandbox somente quando explicitamente configurado.
+export const PAGOU_BASE = process.env.PAGOU_ENV === 'sandbox' ? 'https://api.pagou.cloud' : 'https://api.pagou.com.br';
 export async function pagou(path, method='GET', body) {
-  const key=process.env.PAGOU_API_KEY;
+  const key=String(process.env.PAGOU_API_KEY||'').trim();
   if(!key) {const e=new Error('Configure PAGOU_API_KEY no servidor.');e.status=503;throw e;}
   const response=await fetch(PAGOU_BASE+path,{method,headers:{'X-API-KEY':key,'User-Agent':'VivaIntegracao/1.0',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(18000)});
   const data=await response.json().catch(()=>({}));
