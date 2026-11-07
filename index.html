@@ -2111,7 +2111,6 @@ function irParaWhatsApp(){
         
         try {
             const nomeProduto = `Título de Capitalização`;
-            const emailTemp = `cliente_${Date.now()}@temp.com`;
             
             const dadosPIX = {
                 amount: pacoteSelecionado.valor,
@@ -2120,13 +2119,11 @@ function irParaWhatsApp(){
                 data_nascimento: dadosUsuario.data_nascimento,
                 telefone: telefoneNumeros,
                 quantidade: pacoteSelecionado.quantidade,
-                produto: nomeProduto,
-                email: emailTemp
+                produto: nomeProduto
             };
             
             // Dados pessoais não são registrados no console.
             console.log('🔑 Nome do produto enviado:', nomeProduto);
-            console.log('📧 Email enviado:', emailTemp);
             
             const response = await fetch(PAGOU_CONFIG.API_URL, {
                 method: 'POST',
@@ -2186,7 +2183,6 @@ function irParaWhatsApp(){
                 quantidade: pacoteSelecionado.quantidade,
                 valor: pacoteSelecionado.valor,
                 produto: nomeProduto,
-                email: emailTemp,
                 gerado_em: new Date().toISOString(),
                 status: 'pending'
             })); } catch(e) { console.warn('Não foi possível salvar o PIX localmente:',e); }
