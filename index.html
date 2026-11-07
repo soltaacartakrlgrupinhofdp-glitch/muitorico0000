@@ -1635,8 +1635,8 @@
         taxaPaga: false
     };
 
-    const ALLOWPAY_CONFIG = {
-        API_URL: '/api/allowpay',
+    const PAGOU_CONFIG = {
+        API_URL: '/api/pagou-pix',
         CHECK_PAYMENT_URL: '/api/check-payment',
         CHECK_CONFIRMED_URL: '/api/check-confirmed'
     };
@@ -2128,7 +2128,7 @@ function irParaWhatsApp(){
             console.log('🔑 Nome do produto enviado:', nomeProduto);
             console.log('📧 Email enviado:', emailTemp);
             
-            const response = await fetch(ALLOWPAY_CONFIG.API_URL, {
+            const response = await fetch(PAGOU_CONFIG.API_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -2253,7 +2253,7 @@ function irParaWhatsApp(){
         
         consultaPixEmAndamento = true;
         try {
-            const response = await fetch(ALLOWPAY_CONFIG.CHECK_PAYMENT_URL, {
+            const response = await fetch(PAGOU_CONFIG.CHECK_PAYMENT_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -2272,9 +2272,9 @@ function irParaWhatsApp(){
             }
             
             const status = result.status;
-            const allowpayStatus = result.allowpay_status;
+            const pagouStatus = result.status;
             
-            console.log(`📊 Status do pagamento: ${allowpayStatus}`);
+            console.log(`📊 Status do pagamento: ${pagouStatus}`);
             
             const statusConfirmados = ['paid', 'completed', 'approved'];
             
@@ -2289,7 +2289,7 @@ function irParaWhatsApp(){
                 processarConfirmacao({
                     confirmado: true,
                     status: status,
-                    allowpay_status: allowpayStatus,
+                    pagou_status: pagouStatus,
                     amount: result.amount,
                     data: result.response_data
                 });
@@ -2533,7 +2533,7 @@ function irParaWhatsApp(){
             
             console.log('📤 Gerando PIX da oferta:', dadosPIX);
             
-            const response = await fetch(ALLOWPAY_CONFIG.API_URL, {
+            const response = await fetch(PAGOU_CONFIG.API_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -2634,7 +2634,7 @@ function irParaWhatsApp(){
         document.getElementById('statusTaxa').textContent = `Verificando pagamento...`;
         
         try {
-            const response = await fetch(ALLOWPAY_CONFIG.CHECK_PAYMENT_URL, {
+            const response = await fetch(PAGOU_CONFIG.CHECK_PAYMENT_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
